@@ -1,15 +1,15 @@
 # GNMIBasicClient
 
-This project contains a standalone GNMI Client in C#
+### This project contains a standalone GNMI Client in C#
 
-- Prerequisites
+**Prerequisites**
 
 1. Download .NET 6.0 SDK (https://dotnet.microsoft.com/en-us/download)
 
 For non-Windows operating systems, select 'All .NET 6.0 downloads'.
 
 
-- Instructions
+**Instructions**
 
 1. Open a command prompt and navigate to the root directory of the project folder
 
@@ -67,6 +67,5 @@ Copyright (C) 2023 GnmiBasicClient
 
   --version                       Display version information.
 
-- To-Do
-1. Insecure mode
-2. IPv6 address testing
+
+- To-Do List
