@@ -1,70 +1,73 @@
 using Gnmi;
 using Grpc.Core;
+using Grpc.Net.Client;
 using CommandLine;
 using Google.Protobuf.WellKnownTypes;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 
 namespace GnmiBasicClient
 {
     public class Options
     {
         [Option('c', "ClientCertFile", Required = false, HelpText = "Cert file for client.")]
-        public string ClientCertFile { get; set; }
+        public string? ClientCertFile { get; set; }
 
         [Option('s', "CaCertFile", Required = false, HelpText = "CA cert file to be passed on client side.")]
-        public string CaCertFile { get; set; }
+        public string? CaCertFile { get; set; }
 
         [Option('k', "ClientKeyFile", Required = false, HelpText = "File containing private key for client")]
-        public string ClientKeyFile { get; set; }
+        public string? ClientKeyFile { get; set; }
 
         [Option('n', "ClientName", Required = false, HelpText = "Name to override on client side")]
-        public string ClientName { get; set; }
+        public string? ClientName { get; set; }
 
         [Option('d', "Destination IP", Required = true, HelpText = "Destination IP of gRPC server.")]
-        public string DestinationIp { get; set; }
+        public string? DestinationIp { get; set; }
 
         [Option('p', "Destination port", Required = true, HelpText = "Destination port of gRPC server.")]
-        public string DestinationPort { get; set; }
+        public string? DestinationPort { get; set; }
 
         [Option('m', "IsSecureMode", Required = true, HelpText = "Whether to use secure mode. Please input: true or false")]
-        public string IsSecureMode { get; set; }
+        public string? IsSecureMode { get; set; }
 
         [Option('h', "HeartbeatIntervalInSec", Required = false, HelpText = "Heartbeat interval in seconds. This gets applied to all paths.")]
-        public string HeartbeatIntervalInSec { get; set; }
+        public string? HeartbeatIntervalInSec { get; set; }
 
         [Option('f', "SamplingFrequencyInSec", Required = false, HelpText = "Sampling frequency in seconds. This gets applied to all paths.")]
-        public string SamplingFrequency { get; set; }
+        public string? SamplingFrequency { get; set; }
 
         [Option('l', "PathFile", Required = true, HelpText = "Name of the file containing list of paths.")]
-        public string PathFile { get; set; }
+        public string? PathFile { get; set; }
 
         [Option('r', "Sku", Required = true, HelpText = "Sku of destination. Please input: Arista or Sonic")]
-        public string Sku { get; set; }
+        public string? Sku { get; set; }
 
         [Option('u', "UserName", Required = false, HelpText = "Username for authentication.")]
-        public string UserName { get; set; }
+        public string? UserName { get; set; }
 
         [Option('w', "Password", Required = false, HelpText = "Password for authentication.")]
-        public string Password { get; set; }
+        public string? Password { get; set; }
 
         [Option('b', "SourceDb", Required = false, HelpText = "Source DB which can be SysDb/Smash etc.")]
-        public string SourceDb { get; set; }
+        public string? SourceDb { get; set; }
 
         [Option('e', "SubscribeMode", Required = false, HelpText = "Subscription mode. Please input: Sample or OnChange")]
-        public string SubscribeMode { get; set; }
+        public string? SubscribeMode { get; set; }
 
         [Option('t', "Type", Required = true, HelpText = "Data retrieval type. Get/Subscribe")]
-        public string Type { get; set; }
+        public string? Type { get; set; }
 
         [Option('v', "OutputRaw", Required = false, HelpText = "Print raw data")]
-        public string OutputRaw { get; set; }
+        public string? OutputRaw { get; set; }
 
         [Option('x', "RegularExpressKey", Required = false, HelpText = "Regular Expression of the Key to catch and output to file")]
-        public string RegularExpressKeyToFile { get; set; }
+        public string? RegularExpressKeyToFile { get; set; }
 
         [Option('a', "OutputFileName", Required = false, HelpText = "The file name of the catch result by key regular expression")]
-        public string OutputFileName { get; set; }
+        public string? OutputFileName { get; set; }
     }
 
     public static class GnmiBasicTool
@@ -72,14 +75,14 @@ namespace GnmiBasicClient
         private static SkuType skuType;
         private static SubscribeMode subscribeMode;
 
-        static async Task Main(string[] args)
+        private static void Main(string[] args)
         {
             Parser.Default.ParseArguments<Options>(args).WithParsed(DisplayOptionsAndExecute);
         }
 
         private static void DisplayOptionsAndExecute(Options options)
         {
-            Grpc.Core.Channel channel;
+            GrpcChannel channel;
             Console.WriteLine("Destination IP: {0}", options.DestinationIp);
             Console.WriteLine("Destination port: {0}", options.DestinationPort);
             Console.WriteLine("Secure mode: {0}", options.IsSecureMode);
@@ -96,15 +99,15 @@ namespace GnmiBasicClient
 
             if (!secure)
             {
-                if (options.DestinationIp.Contains(":"))
+                if (options.DestinationIp!.Contains(":"))
                 {
                     Console.WriteLine("Destination host is V6 address");
-                    channel = new Grpc.Core.Channel($"[{options.DestinationIp}]:{options.DestinationPort}", ChannelCredentials.Insecure);
+                    channel = GrpcChannel.ForAddress($"http://[{options.DestinationIp}]:{options.DestinationPort}", new GrpcChannelOptions { Credentials = ChannelCredentials.Insecure });
                 }
                 else
                 {
                     Console.WriteLine("Destination host is V4 address");
-                    channel = new Grpc.Core.Channel(options.DestinationIp, int.Parse(options.DestinationPort), ChannelCredentials.Insecure);
+                    channel = GrpcChannel.ForAddress($"http://{options.DestinationIp}:{options.DestinationPort}", new GrpcChannelOptions { Credentials = ChannelCredentials.Insecure });
                 }
             }
             else
@@ -114,33 +117,48 @@ namespace GnmiBasicClient
                 Console.WriteLine("client key file name: {0}", options.ClientKeyFile);
                 Console.WriteLine("client name to override: {0}", options.ClientName);
 
-                var cacert = File.ReadAllText(options.CaCertFile);
-                var clientcert = File.ReadAllText(options.ClientCertFile);
-                var clientkey = File.ReadAllText(options.ClientKeyFile);
-                var ssl = new SslCredentials(cacert, new KeyCertificatePair(clientcert, clientkey));
-                var channelOptions = new List<ChannelOption>
+
+                SocketsHttpHandler socketsHttpHandler = new()
                 {
-                    new ChannelOption(Grpc.Core.ChannelOptions.SslTargetNameOverride, options.ClientName)
+                    SslOptions = new SslClientAuthenticationOptions
+                    {
+                        EncryptionPolicy = EncryptionPolicy.RequireEncryption,
+                        ClientCertificates = new X509CertificateCollection(),
+                        RemoteCertificateValidationCallback = (_, cert, chain, _) =>
+                        {
+                            chain!.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+                            chain.ChainPolicy.CustomTrustStore.Add(new X509Certificate2(options.CaCertFile!));
+                            return chain.Build(new X509Certificate2(cert!));
+                        },
+                        TargetHost = options.ClientName
+                    },
                 };
 
-                if (options.DestinationIp.Contains(":"))
+                // Pass the client certificate so the server can authenticate the client
+                var ephemeral = X509Certificate2.CreateFromPemFile(options.ClientCertFile!, options.ClientKeyFile);
+                var clientCert = ephemeral.Export(X509ContentType.Pkcs12);
+                socketsHttpHandler.SslOptions.ClientCertificates.Add(new X509Certificate2(clientCert));
+
+
+
+                if (options.DestinationIp!.Contains(":"))
                 {
                     Console.WriteLine("Destination host is V6 address");
-                    channel = new Grpc.Core.Channel($"[{options.DestinationIp}]:{options.DestinationPort}", ssl, channelOptions);
+                    channel = GrpcChannel.ForAddress($"https://[{options.DestinationIp}]:{options.DestinationPort}", new GrpcChannelOptions { HttpHandler = socketsHttpHandler });
                 }
                 else
                 {
                     Console.WriteLine("Destination host is V4 address");
-                    channel = new Grpc.Core.Channel(options.DestinationIp, int.Parse(options.DestinationPort), ssl, channelOptions);
+                    channel = GrpcChannel.ForAddress($"https://{options.DestinationIp}:{options.DestinationPort}", new GrpcChannelOptions { HttpHandler = socketsHttpHandler });
                 }
             }
             var client = new gNMI.gNMIClient(channel);
             Console.WriteLine("Successfully created GRPC client");
 
-            switch (options.Type.ToLower())
+            switch (options.Type!.ToLower())
             {
                 case "get":
-                    Get(channel, client, options);
+                    Get(client, options);
                     break;
 
                 case "subscribe":
@@ -153,7 +171,7 @@ namespace GnmiBasicClient
                     break;
             }
 
-            static void Get(Grpc.Core.Channel channel, gNMI.gNMIClient client, Options options)
+            static void Get(gNMI.gNMIClient client, Options options)
             {
                 GetRequest request = new GetRequest
                 {
@@ -161,7 +179,7 @@ namespace GnmiBasicClient
                     Type = GetRequest.Types.DataType.All,
                 };
 
-                var pathStrings = File.ReadAllLines(options.PathFile);
+                var pathStrings = File.ReadAllLines(options.PathFile!);
 
                 foreach (var pathString in pathStrings)
                 {
@@ -230,7 +248,7 @@ namespace GnmiBasicClient
 
                 ulong heartbeatInterval = heartbeatInSec * milliseconds * nanoseconds;
        
-                var pathStrings = File.ReadAllLines(options.PathFile);
+                var pathStrings = File.ReadAllLines(options.PathFile!);
                 if (!string.IsNullOrWhiteSpace(options.SourceDb))
                 {
                     subList.Prefix = GetPrefix(options);
@@ -292,12 +310,12 @@ namespace GnmiBasicClient
                 return subList;
             }
 
-            static async void Subscribe(Grpc.Core.Channel grpcChannel, gNMI.gNMIClient client, Options options)
+            static void Subscribe(GrpcChannel grpcChannel, gNMI.gNMIClient client, Options options)
             {
                 var sl = GetSubscriptions(options);
                 SubscribeRequest subReq = new SubscribeRequest { Subscribe = sl };
 
-                IAsyncStreamReader<SubscribeResponse> responseStream = null;
+                IAsyncStreamReader<SubscribeResponse> responseStream = null!;
                 try
                 {
                     AsyncDuplexStreamingCall<SubscribeRequest, SubscribeResponse> call;
@@ -328,7 +346,7 @@ namespace GnmiBasicClient
 
                 int count = 0;
 
-                while (grpcChannel.State == ChannelState.Ready) {
+                while (grpcChannel.State == ConnectivityState.Ready) {
                     if (responseStream == null)
                     {
                         Console.WriteLine("Response stream is null");
@@ -363,7 +381,7 @@ namespace GnmiBasicClient
 
             static Gnmi.Path GetPrefix(Options options)
             {
-                Gnmi.Path prefix = null;
+                Gnmi.Path prefix = null!;
 
                 switch (skuType)
                 {
@@ -448,56 +466,13 @@ namespace GnmiBasicClient
                 return parentString.Substring(adjustedpredecessorIndex, successorIndex - adjustedpredecessorIndex);
             }
         }
-        private static void ProcessNotification(
-            Notification notification,
-            SubscribeMode subscribeMode = SubscribeMode.None,
-            Options options = null,
-            SkuType skuType = SkuType.None)
-        {
-            if (options != null && !string.IsNullOrWhiteSpace(options.OutputRaw))
-            {
-                if (!bool.TryParse(options.OutputRaw, out bool outputRaw))
-                {
-                    Console.WriteLine("Could not parse {0} into bool", options.OutputRaw);
-                }
-                else
-                {
-                    if (outputRaw)
-                    {
-                        Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(notification));
-                    }
-                }
-            }
-
-            var timeStamp = ConvertEpochToDateTime((ulong)notification.Timestamp, DateTimeKind.Utc, EpochGranularity.Nanoseconds);
-            PrintAllUpdatesInNotification(notification, timeStamp.ToString(), subscribeMode, options, skuType);
-        }
-
-        private const uint miliToNanoSeconds = 1000000;
-        private static DateTime ConvertEpochToDateTime(ulong epoch, DateTimeKind timezone, EpochGranularity granularity)
-        {
-            switch (granularity)
-            {
-                case EpochGranularity.Nanoseconds:
-                    ulong epochInMil = epoch / miliToNanoSeconds;
-                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddMilliseconds(epochInMil);
-
-                case EpochGranularity.Milliseconds:
-                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddMilliseconds(epoch);
-
-                case EpochGranularity.Seconds:
-                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddSeconds(epoch);
-
-                default:
-                    throw new NotSupportedException("Please enter valid epoch granularity.");
-            }
-        }
         private static void PrintAllUpdatesInNotification(
             Notification notification,
             string timeStamp,
             SubscribeMode subscribeMode = SubscribeMode.None,
-            Options options = null,
-            SkuType skuType = SkuType.None)
+            Options options = null!,
+            SkuType skuType = SkuType.None,
+            Dictionary<string, int> testResults = null!)
         {
 
             Console.WriteLine("Notification at {0}", timeStamp);
@@ -513,7 +488,7 @@ namespace GnmiBasicClient
                         if (update != null && update.Path != null)
                         {
                             var pathStr = ConvertPath(update.Path);
-                            PrintGnmiUpdateValue(update.Val, ConvertPath(update.Path), updateIndex);
+                            PrintGnmiUpdateValue(update, pathStr, updateIndex, testResults);
                             OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
                         }
 
@@ -531,13 +506,13 @@ namespace GnmiBasicClient
                 foreach (var update in notification.Update)
                 {
                     var pathStr = ConvertPath(update.Path);
-                    if (update.Value != null)
+                    if (update.Val != null)
                     {
-                        Console.WriteLine("{0}:{1} UpdateIndex:{2}", pathStr, update.Value.Value_.ToStringUtf8(), updateIndex);
+                        Console.WriteLine("{0}:{1} UpdateIndex:{2}", pathStr, update.Val, updateIndex);
                     }
                     else
                     {
-                        PrintGnmiUpdateValue(update.Val, pathStr, updateIndex);
+                        PrintGnmiUpdateValue(update, pathStr, updateIndex, testResults);
                     }
 
                     OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
@@ -567,7 +542,7 @@ namespace GnmiBasicClient
         }
         private static string ConvertPath(Gnmi.Path path)
         {
-            if (path.Element != null && path.Element.Count > 0)
+            if (path.Elem != null && path.Elem.Count > 0)
             {
                 return ConvertPathToStringInOldFormat(path);
             }
@@ -577,14 +552,66 @@ namespace GnmiBasicClient
             }
         }
 
+        private static void ProcessNotification(
+            Notification notification,
+            SubscribeMode subscribeMode = SubscribeMode.None,
+            Options options = null!,
+            SkuType skuType = SkuType.None,
+            Dictionary<string, int> testResults = null!)
+        {
+            if (options != null && !string.IsNullOrWhiteSpace(options.OutputRaw))
+            {
+                if (!bool.TryParse(options.OutputRaw, out bool outputRaw))
+                {
+                    Console.WriteLine("Could not parse {0} into bool", options.OutputRaw);
+                }
+                else
+                {
+                    if (outputRaw)
+                    {
+                        Console.WriteLine(Newtonsoft.Json.JsonConvert.SerializeObject(notification));
+                    }
+                }
+            }
+
+            var timeStamp = ConvertEpochToDateTime((ulong)notification.Timestamp, DateTimeKind.Utc, EpochGranularity.Nanoseconds);
+            PrintAllUpdatesInNotification(notification, timeStamp.ToString(), subscribeMode, options, skuType, testResults);
+        }
+
+        private const uint miliToNanoSeconds = 1000000;
+        private static DateTime ConvertEpochToDateTime(ulong epoch, DateTimeKind timezone, EpochGranularity granularity)
+        {
+            switch (granularity)
+            {
+                case EpochGranularity.Nanoseconds:
+                    ulong epochInMil = epoch / miliToNanoSeconds;
+                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddMilliseconds(epochInMil);
+
+                case EpochGranularity.Milliseconds:
+                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddMilliseconds(epoch);
+
+                case EpochGranularity.Seconds:
+                    return new DateTime(1970, 1, 1, 0, 0, 0, timezone).AddSeconds(epoch);
+
+                default:
+                    throw new NotSupportedException("Please enter valid epoch granularity.");
+            }
+        }
         private static string ConvertPathToStringInOldFormat(Gnmi.Path path)
         {
-            if (path == null || path.Element == null || path.Element.Count == 0)
+            if (path.Elem == null || path.Elem.Count == 0)
             {
                 return string.Empty;
             }
 
-            return path.Element.Aggregate((current, element) => current + "/" + element);
+            var pathStringBuilder = new StringBuilder();
+
+            foreach (var pathElem in path.Elem)
+            {
+                pathStringBuilder.Append($"{pathElem}/");
+            }
+
+            return pathStringBuilder.ToString().TrimEnd('/');
         }
         private static void OutputToFileIfConfigured(Options options, Update update, string pathStr, string timeStamp, uint updateIndex)
         {
@@ -598,13 +625,13 @@ namespace GnmiBasicClient
                 if (Regex.IsMatch(pathStr, options.RegularExpressKeyToFile))
                 {
                     string msg;
-                    if (update.Value != null)
+                    if (update.Val != null)
                     {
-                        msg = update.Value.Value_.ToStringUtf8();
+                        msg = update.Val.ToString();
                     }
                     else
                     {
-                        msg = GetGnmiUpdateValue(update.Val);
+                        msg = GetGnmiUpdateValue(update.Val!);
                     }
 
                     File.AppendAllText(options.OutputFileName, $"{timeStamp} {pathStr}:{msg} UpdateIndex:{updateIndex}{System.Environment.NewLine}");
@@ -615,10 +642,20 @@ namespace GnmiBasicClient
                 }
             }
         }
-        private static void PrintGnmiUpdateValue(TypedValue updateValue, string path, uint updateIndex)
+        private static void PrintGnmiUpdateValue(Update update, string path, uint updateIndex, Dictionary<string, int>? testResults = null)
         {
-            string val = GetGnmiUpdateValue(updateValue);
-
+            string val = update.Val != null ? update.Val.ToString() : GetGnmiUpdateValue(update.Val!);
+            if (testResults != null)
+            {
+                if (testResults.ContainsKey(path))
+                {
+                    testResults[path] += 1;
+                }
+                else
+                {
+                    testResults.Add(path, 1);
+                }
+            }
             Console.WriteLine("{0} : [{1}] UpdateIndex:{2}", path, val, updateIndex);
         }
         private static string GetGnmiUpdateValue(TypedValue updateValue)
@@ -668,7 +705,7 @@ namespace GnmiBasicClient
         }
         static SkuType GetSkuType(Options options)
         {
-            switch (options.Sku.ToLower())
+            switch (options.Sku!.ToLower())
             {
                 case "arista":
                     return SkuType.Arista;
