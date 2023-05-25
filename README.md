@@ -17,7 +17,7 @@ For non-Windows operating systems, select 'All .NET 6.0 downloads'.
 
 3. Navigate to the folder 'GNMIBasicClient\bin\Debug\net6.0\' where you will find an application file named GnmiBasicTool.exe
 
-4. Create a file named Paths.txt; write each path you would like to get/subscribe (one path per line)
+4. In the current folder, create a file named Paths.txt; write each path you would like to get/subscribe (one path per line)
 
 4. Run GnmiBasicTool.exe using the flags below
 
@@ -67,5 +67,5 @@ Copyright (C) 2023 GnmiBasicClient
 
   --version                       Display version information.
 
-
 - To-Do List
+1. test IPv6 address

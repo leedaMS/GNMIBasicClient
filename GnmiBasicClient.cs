@@ -89,7 +89,14 @@ namespace GnmiBasicClient
             Console.WriteLine("File containing list of paths: {0}", options.PathFile);
 
             skuType = GetSkuType(options);
-            subscribeMode = GetSubscribeMode(options);
+            if (options.Type!.ToLower() == "subscribe")
+            {
+                subscribeMode = GetSubscribeMode(options);
+            }
+            else
+            {
+                subscribeMode = SubscribeMode.None;
+            }
 
             bool secure;
             if (!bool.TryParse(options.IsSecureMode, out secure))
@@ -138,8 +145,6 @@ namespace GnmiBasicClient
                 var ephemeral = X509Certificate2.CreateFromPemFile(options.ClientCertFile!, options.ClientKeyFile);
                 var clientCert = ephemeral.Export(X509ContentType.Pkcs12);
                 socketsHttpHandler.SslOptions.ClientCertificates.Add(new X509Certificate2(clientCert));
-
-
 
                 if (options.DestinationIp!.Contains(":"))
                 {
@@ -471,8 +476,7 @@ namespace GnmiBasicClient
             string timeStamp,
             SubscribeMode subscribeMode = SubscribeMode.None,
             Options options = null!,
-            SkuType skuType = SkuType.None,
-            Dictionary<string, int> testResults = null!)
+            SkuType skuType = SkuType.None)
         {
 
             Console.WriteLine("Notification at {0}", timeStamp);
@@ -488,7 +492,7 @@ namespace GnmiBasicClient
                         if (update != null && update.Path != null)
                         {
                             var pathStr = ConvertPath(update.Path);
-                            PrintGnmiUpdateValue(update, pathStr, updateIndex, testResults);
+                            PrintGnmiUpdateValue(update.Val, pathStr, updateIndex);
                             OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
                         }
 
@@ -508,11 +512,11 @@ namespace GnmiBasicClient
                     var pathStr = ConvertPath(update.Path);
                     if (update.Val != null)
                     {
-                        Console.WriteLine("{0}:{1} UpdateIndex:{2}", pathStr, update.Val, updateIndex);
+                        Console.WriteLine("{0}:{1} UpdateIndex:{2}", pathStr, update.Val.JsonIetfVal.ToStringUtf8(), updateIndex);
                     }
                     else
                     {
-                        PrintGnmiUpdateValue(update, pathStr, updateIndex, testResults);
+                        PrintGnmiUpdateValue(update.Val!, pathStr, updateIndex);
                     }
 
                     OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
@@ -556,8 +560,7 @@ namespace GnmiBasicClient
             Notification notification,
             SubscribeMode subscribeMode = SubscribeMode.None,
             Options options = null!,
-            SkuType skuType = SkuType.None,
-            Dictionary<string, int> testResults = null!)
+            SkuType skuType = SkuType.None)
         {
             if (options != null && !string.IsNullOrWhiteSpace(options.OutputRaw))
             {
@@ -575,7 +578,7 @@ namespace GnmiBasicClient
             }
 
             var timeStamp = ConvertEpochToDateTime((ulong)notification.Timestamp, DateTimeKind.Utc, EpochGranularity.Nanoseconds);
-            PrintAllUpdatesInNotification(notification, timeStamp.ToString(), subscribeMode, options, skuType, testResults);
+            PrintAllUpdatesInNotification(notification, timeStamp.ToString(), subscribeMode, options!, skuType);
         }
 
         private const uint miliToNanoSeconds = 1000000;
@@ -642,20 +645,9 @@ namespace GnmiBasicClient
                 }
             }
         }
-        private static void PrintGnmiUpdateValue(Update update, string path, uint updateIndex, Dictionary<string, int>? testResults = null)
+        private static void PrintGnmiUpdateValue(TypedValue update, string path, uint updateIndex)
         {
-            string val = update.Val != null ? update.Val.ToString() : GetGnmiUpdateValue(update.Val!);
-            if (testResults != null)
-            {
-                if (testResults.ContainsKey(path))
-                {
-                    testResults[path] += 1;
-                }
-                else
-                {
-                    testResults.Add(path, 1);
-                }
-            }
+            string val = GetGnmiUpdateValue(update);
             Console.WriteLine("{0} : [{1}] UpdateIndex:{2}", path, val, updateIndex);
         }
         private static string GetGnmiUpdateValue(TypedValue updateValue)
@@ -687,7 +679,7 @@ namespace GnmiBasicClient
                 Console.WriteLine("Please include 'SubscribeMode' flag (e)");
                 Environment.Exit(-1);
             }
-            switch (options.SubscribeMode.ToLower())
+            switch (options.SubscribeMode!.ToLower())
             {
                 case "sample":
                     return SubscribeMode.Sample;
