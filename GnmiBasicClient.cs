@@ -492,7 +492,7 @@ namespace GnmiBasicClient
                         if (update != null && update.Path != null)
                         {
                             var pathStr = ConvertPath(update.Path);
-                            PrintGnmiUpdateValue(update.Val, pathStr, updateIndex);
+                            PrintGnmiUpdateValue(update, pathStr, updateIndex);
                             OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
                         }
 
@@ -510,17 +510,8 @@ namespace GnmiBasicClient
                 foreach (var update in notification.Update)
                 {
                     var pathStr = ConvertPath(update.Path);
-                    if (update.Val != null)
-                    {
-                        Console.WriteLine("{0}:{1} UpdateIndex:{2}", pathStr, update.Val.JsonIetfVal.ToStringUtf8(), updateIndex);
-                    }
-                    else
-                    {
-                        PrintGnmiUpdateValue(update.Val!, pathStr, updateIndex);
-                    }
-
+                    PrintGnmiUpdateValue(update, pathStr, updateIndex);
                     OutputToFileIfConfigured(options, update, pathStr, timeStamp, updateIndex);
-
                     updateIndex += 1;
                 }
             }
@@ -645,9 +636,9 @@ namespace GnmiBasicClient
                 }
             }
         }
-        private static void PrintGnmiUpdateValue(TypedValue update, string path, uint updateIndex)
+        private static void PrintGnmiUpdateValue(Update update, string path, uint updateIndex)
         {
-            string val = GetGnmiUpdateValue(update);
+            string val = GetGnmiUpdateValue(update.Val!);
             Console.WriteLine("{0} : [{1}] UpdateIndex:{2}", path, val, updateIndex);
         }
         private static string GetGnmiUpdateValue(TypedValue updateValue)
